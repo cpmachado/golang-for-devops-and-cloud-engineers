@@ -11,10 +11,17 @@ import (
 	"strings"
 )
 
+type Page struct {
+	Name string `json:"page"`
+}
+
 type Words struct {
-	Page  string   `json:"page"`
 	Input string   `json:"input"`
 	Words []string `json:"words"`
+}
+
+type Occurence struct {
+	Words map[string]int `json:"words"`
 }
 
 func main() {
@@ -29,8 +36,8 @@ func main() {
 	target := args[1]
 
 	if _, err := url.ParseRequestURI(target); err != nil {
-		fmt.Errorf("Usage: %v <url>\n", prog)
-		fmt.Errorf("Invalid URL: %v\n", target)
+		fmt.Printf("Usage: %v <url>\n", prog)
+		fmt.Printf("Invalid URL: %v\n", target)
 		os.Exit(1)
 	}
 
@@ -47,19 +54,37 @@ func main() {
 	}
 
 	if res.StatusCode != 200 {
-		fmt.Errorf("Invalid output(HTTP code %d): %s\n", res.StatusCode, body)
+		fmt.Printf("Invalid output(HTTP code %d): %s\n", res.StatusCode, body)
 		os.Exit(1)
 	}
 
-	var words Words
-
-	err = json.Unmarshal(body, &words)
+	var page Page
+	err = json.Unmarshal(body, &page)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("JSON Parsed:\n")
-	fmt.Printf("- page: %s\n", words.Page)
-	fmt.Printf("- input: %v\n", words.Input)
-	fmt.Printf("- words: %s\n", strings.Join(words.Words, ", "))
+	switch page.Name {
+	case "words":
+		var words Words
+		err = json.Unmarshal(body, &words)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("JSON Parsed:\n")
+		fmt.Printf("- page: %s\n", page.Name)
+		fmt.Printf("- input: %v\n", words.Input)
+		fmt.Printf("- words: %s\n", strings.Join(words.Words, ", "))
+	case "occurrence":
+		var occurence Occurence
+		err = json.Unmarshal(body, &occurence)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("JSON Parsed:\n")
+		fmt.Printf("- page: %s\n", page.Name)
+		fmt.Printf("- words: %v\n", occurence.Words)
+	default:
+		fmt.Printf("Page is Unknown\n")
+	}
 }
