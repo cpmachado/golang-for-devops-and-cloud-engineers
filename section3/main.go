@@ -4,64 +4,102 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 )
 
+// Reponse is an interface to manage the parsing of the API Payload
+type Response interface {
+	// GetResponse retrieves a serialized version of the content
+	GetResponse() string
+}
+
+// Page represents the type of page being parsed
 type Page struct {
 	Name string `json:"page"`
 }
 
+// Words represents the type associated with the /words endpoint
 type Words struct {
 	Input string   `json:"input"`
 	Words []string `json:"words"`
 }
 
+func (w *Words) GetResponse() string {
+	return fmt.Sprintf("- Input: %s\n- Words: %s\n", w.Input, strings.Join(w.Words, ", "))
+}
+
+// Occurrence represents the type associated with the /occurrence endpoint
 type Occurence struct {
 	Words map[string]int `json:"words"`
 }
 
+func (o *Occurence) GetResponse() string {
+	out := []string{}
+
+	for word, count := range o.Words {
+		out = append(out, fmt.Sprintf("%s (%d)", word, count))
+	}
+	return fmt.Sprintf("- Words: %s\n", strings.Join(out, ", "))
+}
+
+// Global variables
+
+var progName string = ""
+
 func main() {
 	args := os.Args
-	prog := args[0]
+	progName = args[0]
 
 	if len(args) != 2 {
-		fmt.Printf("Usage: %v <url>\n", prog)
-		os.Exit(1)
+		help()
 	}
 
-	target := args[1]
-
-	if _, err := url.ParseRequestURI(target); err != nil {
-		fmt.Printf("Usage: %v <url>\n", prog)
-		fmt.Printf("Invalid URL: %v\n", target)
+	res, err := doRequest(args[1])
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)
+	}
+	if res == nil {
+		fmt.Printf("No response\n")
+		os.Exit(1)
+	}
+	fmt.Printf("Response:\n%s\n", res.GetResponse())
+}
+
+// help prints help and exits
+func help() {
+	fmt.Printf("Usage: %v <url>\n", progName)
+	os.Exit(1)
+}
+
+func doRequest(target string) (Response, error) {
+	if _, err := url.ParseRequestURI(target); err != nil {
+		return nil, fmt.Errorf("Invalid URL: %v\n", target)
 	}
 
 	res, err := http.Get(target)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Get error: %s\n", err)
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("ReadAll(Body) error: %s\n", err)
 	}
 
 	if res.StatusCode != 200 {
-		fmt.Printf("Invalid output(HTTP code %d): %s\n", res.StatusCode, body)
-		os.Exit(1)
+		return nil, fmt.Errorf("Invalid output(HTTP code %d): %s\n", res.StatusCode, body)
 	}
 
 	var page Page
 	err = json.Unmarshal(body, &page)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("Unmarshal(Page) error: %s\n", err)
 	}
 
 	switch page.Name {
@@ -69,22 +107,17 @@ func main() {
 		var words Words
 		err = json.Unmarshal(body, &words)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("Unmarshal(Words) error: %s\n", err)
 		}
-		fmt.Printf("JSON Parsed:\n")
-		fmt.Printf("- page: %s\n", page.Name)
-		fmt.Printf("- input: %v\n", words.Input)
-		fmt.Printf("- words: %s\n", strings.Join(words.Words, ", "))
+		return &words, nil
 	case "occurrence":
 		var occurence Occurence
 		err = json.Unmarshal(body, &occurence)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("Unmarshal(Occurrence) error: %s\n", err)
 		}
-		fmt.Printf("JSON Parsed:\n")
-		fmt.Printf("- page: %s\n", page.Name)
-		fmt.Printf("- words: %v\n", occurence.Words)
-	default:
-		fmt.Printf("Page is Unknown\n")
+		return &occurence, nil
 	}
+
+	return nil, nil
 }
