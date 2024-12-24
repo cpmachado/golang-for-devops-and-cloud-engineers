@@ -46,16 +46,13 @@ func (o *Occurence) GetResponse() string {
 	return fmt.Sprintf("- Words: %s\n", strings.Join(out, ", "))
 }
 
-// Global variables
-
-var progName string = ""
-
 func main() {
 	var (
 		requestURL string
 		password   string
 		parsedURL  *url.URL
 		err        error
+		token      string
 	)
 
 	flag.StringVar(&requestURL, "url", "", "url to access")
@@ -69,10 +66,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	response, err := doRequest(parsedURL.String())
+	client := http.Client{}
+
+	if password != "" {
+		authURL := fmt.Sprintf("%s://%s/login", parsedURL.Scheme, parsedURL.Host)
+		token, err = doLoginRequest(client, authURL, password)
+		if err != nil {
+			if requestError, ok := err.(RequestError); ok {
+				fmt.Printf(
+					"Error: %s, Status code: %d, body: %s\n",
+					requestError.Err, requestError.HTTPCode, requestError.Body)
+			} else {
+				fmt.Printf("Error: %s\n", err)
+			}
+			os.Exit(1)
+		}
+		// transport
+		client.Transport = JotTransport{
+			token:     token,
+			transport: http.DefaultTransport,
+		}
+	}
+	response, err := doRequest(client, parsedURL.String())
 	if err != nil {
-		if reqError, ok := err.(RequestError); ok {
-			fmt.Printf("Error: %s, Status code: %d, body: %s\n", reqError.Err, reqError.HTTPCode, reqError.Body)
+		if requestError, ok := err.(RequestError); ok {
+			fmt.Printf(
+				"Error: %s, Status code: %d, body: %s\n",
+				requestError.Err, requestError.HTTPCode, requestError.Body)
 		} else {
 			fmt.Printf("Error: %s\n", err)
 		}
@@ -85,12 +105,12 @@ func main() {
 	fmt.Printf("Response:\n%s", response.GetResponse())
 }
 
-func doRequest(target string) (Response, error) {
+func doRequest(client http.Client, target string) (Response, error) {
 	if _, err := url.ParseRequestURI(target); err != nil {
 		return nil, fmt.Errorf("Invalid URL: %v\n", target)
 	}
 
-	response, err := http.Get(target)
+	response, err := client.Get(target)
 	if err != nil {
 		return nil, fmt.Errorf("Get error: %s\n", err)
 	}
