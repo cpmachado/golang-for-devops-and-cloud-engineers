@@ -1,4 +1,4 @@
-package main
+package api
 
 // RequestError is an error to manage after retrieving response
 type RequestError struct {

@@ -1,13 +1,9 @@
-package main
+package api
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
-	"os"
 	"strings"
 )
 
@@ -46,71 +42,9 @@ func (o *Occurence) GetResponse() string {
 	return fmt.Sprintf("- Words: %s\n", strings.Join(out, ", "))
 }
 
-func main() {
-	var (
-		requestURL string
-		password   string
-		parsedURL  *url.URL
-		err        error
-		token      string
-	)
-
-	flag.StringVar(&requestURL, "url", "", "url to access")
-	flag.StringVar(&password, "password", "", "use a password to access our api")
-
-	flag.Parse()
-
-	if parsedURL, err = url.ParseRequestURI(requestURL); err != nil {
-		fmt.Printf("Invalid URL: %v\n", err)
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	client := http.Client{}
-
-	if password != "" {
-		authURL := fmt.Sprintf("%s://%s/login", parsedURL.Scheme, parsedURL.Host)
-		token, err = doLoginRequest(client, authURL, password)
-		if err != nil {
-			if requestError, ok := err.(RequestError); ok {
-				fmt.Printf(
-					"Error: %s, Status code: %d, body: %s\n",
-					requestError.Err, requestError.HTTPCode, requestError.Body)
-			} else {
-				fmt.Printf("Error: %s\n", err)
-			}
-			os.Exit(1)
-		}
-		// transport
-		client.Transport = JotTransport{
-			token:     token,
-			transport: http.DefaultTransport,
-		}
-	}
-	response, err := doRequest(client, parsedURL.String())
-	if err != nil {
-		if requestError, ok := err.(RequestError); ok {
-			fmt.Printf(
-				"Error: %s, Status code: %d, body: %s\n",
-				requestError.Err, requestError.HTTPCode, requestError.Body)
-		} else {
-			fmt.Printf("Error: %s\n", err)
-		}
-		os.Exit(1)
-	}
-	if response == nil {
-		fmt.Printf("No response\n")
-		os.Exit(1)
-	}
-	fmt.Printf("Response:\n%s", response.GetResponse())
-}
-
-func doRequest(client http.Client, target string) (Response, error) {
-	if _, err := url.ParseRequestURI(target); err != nil {
-		return nil, fmt.Errorf("Invalid URL: %v\n", target)
-	}
-
-	response, err := client.Get(target)
+// DoRequest makes API request
+func (a API) DoRequest(target string) (Response, error) {
+	response, err := a.Client.Get(target)
 	if err != nil {
 		return nil, fmt.Errorf("Get error: %s\n", err)
 	}
